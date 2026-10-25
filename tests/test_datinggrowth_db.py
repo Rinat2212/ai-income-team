@@ -25,6 +25,22 @@ class DatingGrowthDatabaseTests(unittest.TestCase):
         self.assertFalse(db.review_draft(did, "rejected"))
         self.assertEqual(db.list_drafts("approved")[0]["status"], "approved")
 
+    def test_permission_status_lifecycle(self):
+        url = "https://t.me/research_example_group"
+        cid = db.add_community("Research example", url, "Check admin rules")
+        self.assertTrue(db.set_permission(cid, "requested", "https://t.me/rules_example", "@admin"))
+        row = next(item for item in db.list_communities() if item["id"] == cid)
+        self.assertEqual(row["permission_status"], "requested")
+        self.assertEqual(row["rules_url"], "https://t.me/rules_example")
+        self.assertTrue(any(item["id"] == cid for item in db.research_queue()))
+        self.assertTrue(db.set_permission(cid, "allowed", "", "@admin approved"))
+        self.assertFalse(any(item["id"] == cid for item in db.research_queue()))
+
+    def test_invalid_permission_status_is_rejected(self):
+        cid = db.add_community("Permission test", "https://t.me/permission_test_group")
+        with self.assertRaises(ValueError):
+            db.set_permission(cid, "sent")
+
     def test_invalid_decision_is_rejected(self):
         with self.assertRaises(ValueError):
             db.review_draft(1, "sent")
