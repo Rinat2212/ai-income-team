@@ -46,7 +46,7 @@ async def start(message: Message, command: CommandStart) -> None:
         return
     await message.answer(
         "DatingGrowth AI запущен. Режим: " + ("DRY RUN" if DRY_RUN else "ручная подготовка")
-        + "\nКоманды: /addcommunity, /communities, /draft, /suggest, /quality, /queue, /stats.\n"
+        + "\nКоманды: /addcommunity, /communities, /research, /permission, /draft, /suggest, /quality, /queue, /stats.\n"
         "Публикаций и массовых рассылок бот не выполняет."
     )
 
@@ -132,6 +132,53 @@ async def suggest(message: Message) -> None:
         )
     log.info("Generated %s permission-first drafts for community %s", len(saved_ids), community_id)
 
+async def research(message: Message) -> None:
+    """Show communities needing permission research; all research is manual."""
+    if not admin_only(message):
+        return
+    rows = db.research_queue()
+    if not rows:
+        await message.answer("Нет сообществ с неизвестным или ожидающим разрешением.")
+        return
+    lines = ["Сообщества для ручной проверки правил и разрешения:"]
+    for row in rows[:25]:
+        lines.append(
+            f"#{row['id']} {row['name']} — {row['permission_status']}\n"
+            f"Группа: {row['url']}\nПравила: {row['rules_url'] or 'не указаны'}\n"
+            f"Контакт: {row['contact'] or 'не указан'}\nЗаметки: {row['notes'] or '—'}"
+        )
+    await message.answer("\n\n".join(lines)[:4000])
+
+
+async def permission(message: Message) -> None:
+    """Save a manually verified permission status for a community."""
+    if not admin_only(message):
+        return
+    raw = (message.text or "").partition(" ")[2].strip()
+    parts = [part.strip() for part in raw.split("|", 3)]
+    valid = {"unknown", "requested", "allowed", "denied"}
+    if len(parts) < 2 or not parts[0].isdigit() or parts[1] not in valid:
+        await message.answer(
+            "Формат: /permission ID | unknown/requested/allowed/denied | https://t.me/правила или - | контакт/заметка"
+        )
+        return
+    community_id, status = int(parts[0]), parts[1]
+    rules_url = parts[2] if len(parts) > 2 and parts[2] != "-" else ""
+    contact = parts[3] if len(parts) > 3 else ""
+    try:
+        changed = db.set_permission(community_id, status, rules_url, contact)
+    except ValueError as exc:
+        await message.answer(f"Проверьте данные: {exc}")
+        return
+    if not changed:
+        await message.answer("ID сообщества не найден. Используйте /communities.")
+        return
+    await message.answer(
+        f"Статус разрешения для сообщества #{community_id} сохранён: {status}. "
+        "Статус allowed ставьте только после явного согласия администратора."
+    )
+
+
 async def quality(message: Message) -> None:
     """Run deterministic checks on an existing draft; human review remains mandatory."""
     if not admin_only(message):
@@ -215,6 +262,8 @@ async def main() -> None:
     dp.message.register(start, CommandStart())
     dp.message.register(addcommunity, Command("addcommunity"))
     dp.message.register(communities, Command("communities"))
+    dp.message.register(research, Command("research"))
+    dp.message.register(permission, Command("permission"))
     dp.message.register(draft, Command("draft"))
     dp.message.register(suggest, Command("suggest"))
     dp.message.register(quality, Command("quality"))
