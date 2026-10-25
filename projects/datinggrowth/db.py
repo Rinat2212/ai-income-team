@@ -41,14 +41,14 @@ def init_db() -> None:
         );
         """)
 
-    # Idempotent migrations keep existing SQLite databases usable.
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(communities)")}
-    if "permission_status" not in columns:
-        conn.execute("ALTER TABLE communities ADD COLUMN permission_status TEXT NOT NULL DEFAULT 'unknown'")
-    if "rules_url" not in columns:
-        conn.execute("ALTER TABLE communities ADD COLUMN rules_url TEXT NOT NULL DEFAULT ''")
-    if "contact" not in columns:
-        conn.execute("ALTER TABLE communities ADD COLUMN contact TEXT NOT NULL DEFAULT ''")
+        # Idempotent migrations keep existing SQLite databases usable.
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(communities)")}
+        if "permission_status" not in columns:
+            conn.execute("ALTER TABLE communities ADD COLUMN permission_status TEXT NOT NULL DEFAULT 'unknown'")
+        if "rules_url" not in columns:
+            conn.execute("ALTER TABLE communities ADD COLUMN rules_url TEXT NOT NULL DEFAULT ''")
+        if "contact" not in columns:
+            conn.execute("ALTER TABLE communities ADD COLUMN contact TEXT NOT NULL DEFAULT ''")
 
 def add_community(name: str, url: str, notes: str = "") -> int:
     with connect() as conn:
