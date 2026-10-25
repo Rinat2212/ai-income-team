@@ -13,7 +13,7 @@
 ## Запуск
 1. Установите Python 3.11+.
 2. Создайте Telegram-бота через BotFather и получите токен.
-3. Скопируйте .env.example в .env, заполните BOT_TOKEN и свой числовой ADMIN_ID.
+3. Скопируйте projects/datinggrowth/.env.example в projects/datinggrowth/.env, заполните BOT_TOKEN и свой числовой ADMIN_ID.
 4. Установите зависимости: pip install -r projects/datinggrowth/requirements.txt.
 5. Запустите из корня репозитория: python -m projects.datinggrowth.bot.
 
