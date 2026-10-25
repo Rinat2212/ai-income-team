@@ -13,6 +13,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from dotenv import load_dotenv
 from . import db
 from .content_agent import OutreachBrief, generate_admin_outreach
+from .quality_agent import check_outreach_text
 
 load_dotenv(Path(__file__).with_name(".env"))
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -45,7 +46,7 @@ async def start(message: Message, command: CommandStart) -> None:
         return
     await message.answer(
         "DatingGrowth AI запущен. Режим: " + ("DRY RUN" if DRY_RUN else "ручная подготовка")
-        + "\nКоманды: /addcommunity, /communities, /draft, /queue, /stats.\n"
+        + "\nКоманды: /addcommunity, /communities, /draft, /suggest, /quality, /queue, /stats.\n"
         "Публикаций и массовых рассылок бот не выполняет."
     )
 
@@ -131,6 +132,32 @@ async def suggest(message: Message) -> None:
         )
     log.info("Generated %s permission-first drafts for community %s", len(saved_ids), community_id)
 
+async def quality(message: Message) -> None:
+    """Run deterministic checks on an existing draft; human review remains mandatory."""
+    if not admin_only(message):
+        return
+    raw = (message.text or "").partition(" ")[2].strip()
+    if not raw.isdigit():
+        await message.answer("Формат: /quality ID_черновика")
+        return
+    draft_id = int(raw)
+    row = next((item for item in db.list_drafts() if item["id"] == draft_id), None)
+    if not row:
+        await message.answer("Черновик не найден в последних 30 записях. Используйте /queue.")
+        return
+    report = check_outreach_text(row["body"])
+    lines = [f"Проверка черновика #{draft_id}: " +
+             ("блокирующих проблем не найдено" if report.approved_for_human_review else "нужна правка")]
+    if report.blockers:
+        lines.append("Блокирующие замечания:\n- " + "\n- ".join(report.blockers))
+    if report.warnings:
+        lines.append("Предупреждения:\n- " + "\n- ".join(report.warnings))
+    if not report.blockers and not report.warnings:
+        lines.append("Автоматические проверки пройдены.")
+    lines.append("Это эвристическая проверка, не гарантия безопасности. Перед использованием прочитайте текст и правила сообщества вручную.")
+    await message.answer("\n\n".join(lines))
+
+
 async def queue(message: Message) -> None:
     if not admin_only(message):
         return
@@ -190,6 +217,7 @@ async def main() -> None:
     dp.message.register(communities, Command("communities"))
     dp.message.register(draft, Command("draft"))
     dp.message.register(suggest, Command("suggest"))
+    dp.message.register(quality, Command("quality"))
     dp.message.register(queue, Command("queue"))
     dp.message.register(stats_command, Command("stats"))
     dp.callback_query.register(review_callback, F.data.startswith("review:"))
