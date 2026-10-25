@@ -41,6 +41,15 @@ def init_db() -> None:
         );
         """)
 
+    # Idempotent migrations keep existing SQLite databases usable.
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(communities)")}
+    if "permission_status" not in columns:
+        conn.execute("ALTER TABLE communities ADD COLUMN permission_status TEXT NOT NULL DEFAULT 'unknown'")
+    if "rules_url" not in columns:
+        conn.execute("ALTER TABLE communities ADD COLUMN rules_url TEXT NOT NULL DEFAULT ''")
+    if "contact" not in columns:
+        conn.execute("ALTER TABLE communities ADD COLUMN contact TEXT NOT NULL DEFAULT ''")
+
 def add_community(name: str, url: str, notes: str = "") -> int:
     with connect() as conn:
         cur = conn.execute("INSERT INTO communities(name, url, notes) VALUES (?, ?, ?)",
@@ -50,8 +59,35 @@ def add_community(name: str, url: str, notes: str = "") -> int:
 def list_communities() -> list[dict[str, Any]]:
     with connect() as conn:
         return [dict(row) for row in conn.execute(
-            "SELECT id, name, url, notes, status, created_at FROM communities ORDER BY id DESC"
+            "SELECT id, name, url, notes, status, permission_status, rules_url, contact, created_at FROM communities ORDER BY id DESC"
         ).fetchall()]
+
+
+def set_permission(community_id: int, permission_status: str, rules_url: str = "", contact: str = "") -> bool:
+    """Record manually verified outreach permission; never contacts a community."""
+    if permission_status not in {"unknown", "requested", "allowed", "denied"}:
+        raise ValueError("Unsupported permission status")
+    if rules_url and not (rules_url.startswith("https://t.me/") or rules_url.startswith("https://telegram.me/")):
+        raise ValueError("Rules URL must be a public Telegram HTTPS link")
+    with connect() as conn:
+        cur = conn.execute(
+            """UPDATE communities
+               SET permission_status=?, rules_url=?, contact=?
+               WHERE id=?""",
+            (permission_status, rules_url.strip(), contact.strip()[:300], community_id),
+        )
+        return cur.rowcount == 1
+
+def research_queue() -> list[dict[str, Any]]:
+    """Return communities whose permission is unknown or still requested."""
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT id, name, url, notes, permission_status, rules_url, contact, created_at
+               FROM communities
+               WHERE permission_status IN ('unknown', 'requested')
+               ORDER BY CASE permission_status WHEN 'requested' THEN 0 ELSE 1 END, id DESC"""
+        ).fetchall()
+        return [dict(row) for row in rows]
 
 def add_draft(community_id: int, body: str) -> int:
     with connect() as conn:
