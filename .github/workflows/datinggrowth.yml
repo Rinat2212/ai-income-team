@@ -26,4 +26,4 @@ jobs:
       - name: Compile Python files
         run: python -m compileall -q projects/datinggrowth tests/test_datinggrowth_db.py
       - name: Run database tests
-        run: python -m unittest tests.test_datinggrowth_db -v
+        run: python -m unittest discover -s tests -p "test_datinggrowth_db.py" -v
