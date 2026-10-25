@@ -12,6 +12,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from dotenv import load_dotenv
 from . import db
+from .content_agent import OutreachBrief, generate_admin_outreach
 
 load_dotenv(Path(__file__).with_name(".env"))
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -92,6 +93,44 @@ async def draft(message: Message) -> None:
     did = db.add_draft(cid, body)
     await message.answer(f"Черновик #{did} создан и ожидает проверки.\n\n{body}", reply_markup=review_keyboard(did))
 
+
+async def suggest(message: Message) -> None:
+    """Generate permission-first variants and save them as reviewable drafts."""
+    if not admin_only(message):
+        return
+    raw = (message.text or "").partition(" ")[2].strip()
+    parts = [part.strip() for part in raw.split("|", 3)]
+    if len(parts) != 4 or not parts[0].isdigit():
+        await message.answer(
+            "Формат: /suggest ID_сообщества | название бота | краткое описание | https://t.me/ссылка"
+        )
+        return
+    community_id = int(parts[0])
+    if not any(c["id"] == community_id for c in db.list_communities()):
+        await message.answer("ID сообщества не найден. Используйте /communities.")
+        return
+    try:
+        variants = generate_admin_outreach(
+            OutreachBrief(
+                community_name=next(c["name"] for c in db.list_communities() if c["id"] == community_id),
+                bot_name=parts[1],
+                purpose=parts[2],
+                public_link=parts[3],
+            )
+        )
+    except ValueError as exc:
+        await message.answer(f"Не удалось создать варианты: {exc}")
+        return
+    saved_ids = []
+    for variant in variants:
+        draft_id = db.add_draft(community_id, variant)
+        saved_ids.append(draft_id)
+        await message.answer(
+            f"Вариант #{draft_id} — только запрос разрешения администратору. Проверьте текст перед использованием.\n\n{variant}",
+            reply_markup=review_keyboard(draft_id),
+        )
+    log.info("Generated %s permission-first drafts for community %s", len(saved_ids), community_id)
+
 async def queue(message: Message) -> None:
     if not admin_only(message):
         return
@@ -150,6 +189,7 @@ async def main() -> None:
     dp.message.register(addcommunity, Command("addcommunity"))
     dp.message.register(communities, Command("communities"))
     dp.message.register(draft, Command("draft"))
+    dp.message.register(suggest, Command("suggest"))
     dp.message.register(queue, Command("queue"))
     dp.message.register(stats_command, Command("stats"))
     dp.callback_query.register(review_callback, F.data.startswith("review:"))
