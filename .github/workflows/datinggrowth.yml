@@ -1,0 +1,29 @@
+name: DatingGrowth AI checks
+
+on:
+  pull_request:
+    paths:
+      - "projects/datinggrowth/**"
+      - "tests/test_datinggrowth_db.py"
+      - ".github/workflows/datinggrowth.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/datinggrowth/**"
+      - "tests/test_datinggrowth_db.py"
+      - ".github/workflows/datinggrowth.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install module dependencies
+        run: python -m pip install -r projects/datinggrowth/requirements.txt
+      - name: Compile Python files
+        run: python -m compileall -q projects/datinggrowth tests/test_datinggrowth_db.py
+      - name: Run database tests
+        run: python -m unittest tests.test_datinggrowth_db -v
