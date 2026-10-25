@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import re
+from pathlib import Path
 from urllib.parse import urlparse
 
 from aiogram import Bot, Dispatcher, F
@@ -12,7 +13,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from dotenv import load_dotenv
 from . import db
 
-load_dotenv()
+load_dotenv(Path(__file__).with_name(".env"))
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger("datinggrowth")
 TOKEN = os.getenv("BOT_TOKEN", "").strip()
@@ -139,7 +140,7 @@ async def review_callback(callback: CallbackQuery) -> None:
 
 async def main() -> None:
     if not TOKEN:
-        raise RuntimeError("BOT_TOKEN не задан. Заполните .env по образцу .env.example.")
+        raise RuntimeError("BOT_TOKEN не задан. Заполните projects/datinggrowth/.env по образцу .env.example.")
     if ADMIN_ID <= 0:
         raise RuntimeError("ADMIN_ID не задан. Укажите числовой Telegram ID владельца.")
     db.init_db()
